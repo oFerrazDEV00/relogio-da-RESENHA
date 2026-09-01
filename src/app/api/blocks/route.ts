@@ -41,7 +41,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, block: row });
   } catch (error) {
     console.error("create block error", error);
-    return NextResponse.json({ error: "failed" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Erro desconhecido";
+    return NextResponse.json(
+      { error: `Falha ao criar bloco: ${msg}` },
+      { status: 500 },
+    );
   }
 }
 
@@ -93,7 +97,11 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ ok: true, block: row });
   } catch (error) {
     console.error("update block error", error);
-    return NextResponse.json({ error: "failed" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Erro desconhecido";
+    return NextResponse.json(
+      { error: `Falha ao atualizar bloco: ${msg}` },
+      { status: 500 },
+    );
   }
 }
 
@@ -110,6 +118,10 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("delete block error", error);
-    return NextResponse.json({ error: "failed" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Erro desconhecido";
+    return NextResponse.json(
+      { error: `Falha ao excluir bloco: ${msg}` },
+      { status: 500 },
+    );
   }
 }

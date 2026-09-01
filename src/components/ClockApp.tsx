@@ -287,6 +287,8 @@ export default function ClockApp({ initial }: { initial: SiteState }) {
     [sync],
   );
 
+  const focusClearTimer = useRef<number>(0);
+
   const persistBlock = useCallback((id: number, patch: Partial<Block>) => {
     window.clearTimeout(patchTimers.current[id]);
     patchTimers.current[id] = window.setTimeout(async () => {
@@ -297,13 +299,20 @@ export default function ClockApp({ initial }: { initial: SiteState }) {
           body: JSON.stringify({ id, ...patch }),
         });
       } finally {
-        setFocusedBlock((current) => (current === id ? null : current));
+        // Adia a limpeza do focusedBlock para não competir com edições rápidas.
+        // Se o usuário fizer outra edição antes do timer, ele é reiniciado.
+        window.clearTimeout(focusClearTimer.current);
+        focusClearTimer.current = window.setTimeout(() => {
+          setFocusedBlock((current) => (current === id ? null : current));
+        }, 2000);
       }
     }, 500);
   }, []);
 
   const patchBlock = useCallback(
     (id: number, patch: Partial<Block>) => {
+      // Cancela qualquer timer de limpeza de foco — o usuário ainda está editando
+      window.clearTimeout(focusClearTimer.current);
       setBlocks((previous) =>
         previous.map((item) => (item.id === id ? { ...item, ...patch } : item)),
       );

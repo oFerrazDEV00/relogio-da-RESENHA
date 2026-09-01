@@ -74,6 +74,11 @@ export default function AdminPanel({
     return () => window.clearTimeout(timer);
   }, [status]);
 
+  // Sincroniza o draft com o config quando ele muda externamente (via sync)
+  useEffect(() => {
+    setDraft(config);
+  }, [config]);
+
   function flash(type: "ok" | "err", msg: string) {
     setStatus({ type, msg });
   }
@@ -395,9 +400,9 @@ export default function AdminPanel({
                   className={input}
                   placeholder="https://... ou data:image/..."
                   value={
-                    config.backgroundUrl?.startsWith("data:")
+                    draft.backgroundUrl?.startsWith("data:")
                       ? ""
-                      : config.backgroundUrl ?? ""
+                      : draft.backgroundUrl ?? ""
                   }
                   onChange={(event) => setDraft({ ...draft, backgroundUrl: event.target.value })}
                 />
@@ -457,9 +462,9 @@ export default function AdminPanel({
                   className={input}
                   placeholder="https://...mp4 ou data:video/..."
                   value={
-                    config.backgroundVideoUrl?.startsWith("data:")
+                    draft.backgroundVideoUrl?.startsWith("data:")
                       ? ""
-                      : config.backgroundVideoUrl ?? ""
+                      : draft.backgroundVideoUrl ?? ""
                   }
                   onChange={(event) =>
                     setDraft({ ...draft, backgroundVideoUrl: event.target.value })
@@ -524,9 +529,9 @@ export default function AdminPanel({
                   className={input}
                   placeholder="https://.../musica.mp3"
                   value={
-                    config.backgroundAudioUrl?.startsWith("data:")
+                    draft.backgroundAudioUrl?.startsWith("data:")
                       ? ""
-                      : config.backgroundAudioUrl ?? ""
+                      : draft.backgroundAudioUrl ?? ""
                   }
                   onChange={(event) =>
                     setDraft({ ...draft, backgroundAudioUrl: event.target.value })

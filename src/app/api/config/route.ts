@@ -77,6 +77,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("config error", error);
-    return NextResponse.json({ error: "failed" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : "Erro desconhecido";
+    return NextResponse.json(
+      { error: `Falha ao salvar configuração: ${msg}` },
+      { status: 500 },
+    );
   }
 }

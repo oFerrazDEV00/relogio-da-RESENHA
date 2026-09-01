@@ -86,9 +86,9 @@ export function isSafeMediaUrl(url: string): boolean {
   try {
     if (url.startsWith("data:")) {
       // Permite apenas data: de tipo imagem, áudio ou vídeo.
-      return /^data:(image|audio|video)\/[a-zA-Z0-9.+-]+(;[a-zA-Z0-9=;-]+)*,/.test(
-        url,
-      );
+      // Aceita parâmetros opcionais (;charset=...) e o marcador ;base64.
+      return /^data:(image|audio|video)\/[a-zA-Z0-9.+-]+(;[a-zA-Z0-9=._-]+)*;base64,/.test(url) ||
+        /^data:(image|audio|video)\/[a-zA-Z0-9.+-]+(;[a-zA-Z0-9=._-]+)*,/.test(url);
     }
     if (url.startsWith("blob:")) {
       // blob: URLs são geradas pelo navegador (seguras no contexto atual)

@@ -34,29 +34,52 @@ async function ensureConfig(): Promise<SiteConfigRow> {
 }
 
 export async function getState(): Promise<SiteState> {
-  const config = await ensureConfig();
-  const items = await db.select().from(blocks).orderBy(asc(blocks.id));
-  return {
-    config: {
-      id: config.id,
-      title: config.title,
-      subtitle: config.subtitle,
-      note: config.note,
-      footerLeft: config.footerLeft,
-      footerRight: config.footerRight,
-      backgroundUrl: config.backgroundUrl,
-      backgroundVideoUrl: config.backgroundVideoUrl,
-      backgroundAudioUrl: config.backgroundAudioUrl,
-      timeMode: (config.timeMode as "real" | "custom") ?? "real",
-      customTime: config.customTime,
-      customTimeBase: config.customTimeBase,
-      clockFrozen: config.clockFrozen ?? false,
-    },
-    blocks: items
-      .filter((b) => b.active)
-      .map((b) => ({ ...b, type: b.type as BlockType })),
-    updatedAt: config.updatedAt.toISOString(),
-  };
+  try {
+    const config = await ensureConfig();
+    const items = await db.select().from(blocks).orderBy(asc(blocks.id));
+    return {
+      config: {
+        id: config.id,
+        title: config.title,
+        subtitle: config.subtitle,
+        note: config.note,
+        footerLeft: config.footerLeft,
+        footerRight: config.footerRight,
+        backgroundUrl: config.backgroundUrl,
+        backgroundVideoUrl: config.backgroundVideoUrl,
+        backgroundAudioUrl: config.backgroundAudioUrl,
+        timeMode: (config.timeMode as "real" | "custom") ?? "real",
+        customTime: config.customTime,
+        customTimeBase: config.customTimeBase,
+        clockFrozen: config.clockFrozen ?? false,
+      },
+      blocks: items
+        .filter((b) => b.active)
+        .map((b) => ({ ...b, type: b.type as BlockType })),
+      updatedAt: config.updatedAt.toISOString(),
+    };
+  } catch (error) {
+    console.warn("Database unavailable, falling back to default config:", error);
+    return {
+      config: {
+        id: "global",
+        title: DEFAULT_CONFIG.title,
+        subtitle: DEFAULT_CONFIG.subtitle,
+        note: DEFAULT_CONFIG.note,
+        footerLeft: DEFAULT_CONFIG.footerLeft,
+        footerRight: DEFAULT_CONFIG.footerRight,
+        backgroundUrl: DEFAULT_CONFIG.backgroundUrl,
+        backgroundVideoUrl: DEFAULT_CONFIG.backgroundVideoUrl,
+        backgroundAudioUrl: DEFAULT_CONFIG.backgroundAudioUrl,
+        timeMode: DEFAULT_CONFIG.timeMode as "real" | "custom",
+        customTime: DEFAULT_CONFIG.customTime,
+        customTimeBase: DEFAULT_CONFIG.customTimeBase,
+        clockFrozen: DEFAULT_CONFIG.clockFrozen,
+      },
+      blocks: [],
+      updatedAt: new Date().toISOString(),
+    };
+  }
 }
 
 export type ConfigPatch = Partial<

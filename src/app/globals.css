@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #e6e6e6;
+  color: #666;
+  font-family: Arial, Helvetica, FreeSans, sans-serif;
+  line-height: 1;
+}
+
+a {
+  text-decoration: none;
+}
+
+a:hover,
+a:focus {
+  text-decoration: underline;
+}
+
+#relogio {
+  font-variant-numeric: tabular-nums;
+}

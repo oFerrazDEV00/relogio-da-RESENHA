@@ -79,24 +79,36 @@ export function formatBytes(bytes: number) {
 
 /**
  * Verifica se a URL é segura para usar como src de <img>, <audio>, <video>
- * (aceita http(s), blob: e data: para imagens/áudios/vídeos, bloqueia javascript: e outros).
+ * (aceita http(s), blob:, / (caminho local) e data: para imagens/áudios/vídeos, bloqueia javascript:).
  */
-export function isSafeMediaUrl(url: string): boolean {
-  if (!url) return false;
+export function isSafeMediaUrl(url: string | null | undefined): boolean {
+  if (!url || typeof url !== "string") return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+
+  // Protocolos e formatos de mídia permitidos
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("data:image/") ||
+    trimmed.startsWith("data:audio/") ||
+    trimmed.startsWith("data:video/") ||
+    trimmed.startsWith("blob:") ||
+    trimmed.startsWith("/")
+  ) {
+    return true;
+  }
+
   try {
-    if (url.startsWith("data:")) {
-      // Permite apenas data: de tipo imagem, áudio ou vídeo.
-      // Aceita parâmetros opcionais (;charset=...) e o marcador ;base64.
-      return /^data:(image|audio|video)\/[a-zA-Z0-9.+-]+(;[a-zA-Z0-9=._-]+)*;base64,/.test(url) ||
-        /^data:(image|audio|video)\/[a-zA-Z0-9.+-]+(;[a-zA-Z0-9=._-]+)*,/.test(url);
-    }
-    if (url.startsWith("blob:")) {
-      // blob: URLs são geradas pelo navegador (seguras no contexto atual)
-      return true;
-    }
-    const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
+    const parsed = new URL(trimmed);
+    return (
+      parsed.protocol === "http:" ||
+      parsed.protocol === "https:" ||
+      parsed.protocol === "blob:" ||
+      parsed.protocol === "data:"
+    );
   } catch {
     return false;
   }
 }
+

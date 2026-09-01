@@ -5,38 +5,68 @@ import { DEFAULT_CONFIG, type BlockType, type SiteState } from "@/lib/types";
 
 export type { SiteState };
 
+type MemoryStore = {
+  config: SiteConfigRow;
+  blocks: BlockRow[];
+  nextBlockId: number;
+};
+
+const globalForStore = globalThis as typeof globalThis & {
+  __resenhaMemoryStore?: MemoryStore;
+};
+
+const memoryStore: MemoryStore = globalForStore.__resenhaMemoryStore ?? {
+  config: { ...DEFAULT_CONFIG, updatedAt: new Date() } as SiteConfigRow,
+  blocks: [],
+  nextBlockId: 1,
+};
+
+globalForStore.__resenhaMemoryStore = memoryStore;
+
 async function ensureConfig(): Promise<SiteConfigRow> {
-  const [row] = await db
-    .select()
-    .from(siteConfig)
-    .where(eq(siteConfig.id, "global"));
+  try {
+    const [row] = await db
+      .select()
+      .from(siteConfig)
+      .where(eq(siteConfig.id, "global"));
 
-  if (row) return row;
+    if (row) {
+      memoryStore.config = row;
+      return row;
+    }
 
-  const [created] = await db
-    .insert(siteConfig)
-    .values(DEFAULT_CONFIG)
-    .onConflictDoNothing()
-    .returning();
+    const [created] = await db
+      .insert(siteConfig)
+      .values(DEFAULT_CONFIG)
+      .onConflictDoNothing()
+      .returning();
 
-  if (created) return created;
+    if (created) {
+      memoryStore.config = created;
+      return created;
+    }
 
-  // race condition: outra request criou entre o SELECT e o INSERT
-  const [existing] = await db
-    .select()
-    .from(siteConfig)
-    .where(eq(siteConfig.id, "global"));
+    const [existing] = await db
+      .select()
+      .from(siteConfig)
+      .where(eq(siteConfig.id, "global"));
 
-  if (existing) return existing;
+    if (existing) {
+      memoryStore.config = existing;
+      return existing;
+    }
+  } catch {
+    // Banco não acessível, usa memória
+  }
 
-  // fallback (nunca deveria chegar aqui)
-  return { ...DEFAULT_CONFIG, updatedAt: new Date() } as SiteConfigRow;
+  return memoryStore.config;
 }
 
 export async function getState(): Promise<SiteState> {
   try {
     const config = await ensureConfig();
     const items = await db.select().from(blocks).orderBy(asc(blocks.id));
+    memoryStore.blocks = items;
     return {
       config: {
         id: config.id,
@@ -58,26 +88,29 @@ export async function getState(): Promise<SiteState> {
         .map((b) => ({ ...b, type: b.type as BlockType })),
       updatedAt: config.updatedAt.toISOString(),
     };
-  } catch (error) {
-    console.warn("Database unavailable, falling back to default config:", error);
+  } catch {
+    // Fallback para memória em caso de banco offline
+    const cfg = memoryStore.config;
     return {
       config: {
-        id: "global",
-        title: DEFAULT_CONFIG.title,
-        subtitle: DEFAULT_CONFIG.subtitle,
-        note: DEFAULT_CONFIG.note,
-        footerLeft: DEFAULT_CONFIG.footerLeft,
-        footerRight: DEFAULT_CONFIG.footerRight,
-        backgroundUrl: DEFAULT_CONFIG.backgroundUrl,
-        backgroundVideoUrl: DEFAULT_CONFIG.backgroundVideoUrl,
-        backgroundAudioUrl: DEFAULT_CONFIG.backgroundAudioUrl,
-        timeMode: DEFAULT_CONFIG.timeMode as "real" | "custom",
-        customTime: DEFAULT_CONFIG.customTime,
-        customTimeBase: DEFAULT_CONFIG.customTimeBase,
-        clockFrozen: DEFAULT_CONFIG.clockFrozen,
+        id: cfg.id,
+        title: cfg.title,
+        subtitle: cfg.subtitle,
+        note: cfg.note,
+        footerLeft: cfg.footerLeft,
+        footerRight: cfg.footerRight,
+        backgroundUrl: cfg.backgroundUrl,
+        backgroundVideoUrl: cfg.backgroundVideoUrl,
+        backgroundAudioUrl: cfg.backgroundAudioUrl,
+        timeMode: (cfg.timeMode as "real" | "custom") ?? "real",
+        customTime: cfg.customTime,
+        customTimeBase: cfg.customTimeBase,
+        clockFrozen: cfg.clockFrozen ?? false,
       },
-      blocks: [],
-      updatedAt: new Date().toISOString(),
+      blocks: memoryStore.blocks
+        .filter((b) => b.active)
+        .map((b) => ({ ...b, type: b.type as BlockType })),
+      updatedAt: (cfg.updatedAt ?? new Date()).toISOString(),
     };
   }
 }
@@ -101,22 +134,58 @@ export type ConfigPatch = Partial<
 >;
 
 export async function updateConfig(patch: ConfigPatch) {
-  await ensureConfig();
-  const [row] = await db
-    .update(siteConfig)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(eq(siteConfig.id, "global"))
-    .returning();
-  return row;
+  memoryStore.config = {
+    ...memoryStore.config,
+    ...patch,
+    updatedAt: new Date(),
+  };
+
+  try {
+    await ensureConfig();
+    const [row] = await db
+      .update(siteConfig)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(siteConfig.id, "global"))
+      .returning();
+    if (row) {
+      memoryStore.config = row;
+      return row;
+    }
+  } catch {
+    // Continua com memoryStore
+  }
+
+  return memoryStore.config;
 }
 
 export async function resetConfig() {
-  await ensureConfig();
-  await db
-    .update(siteConfig)
-    .set({ ...DEFAULT_CONFIG, updatedAt: new Date() })
-    .where(eq(siteConfig.id, "global"));
-  await db.delete(blocks);
+  memoryStore.config = { ...DEFAULT_CONFIG, updatedAt: new Date() } as SiteConfigRow;
+  memoryStore.blocks = [];
+
+  try {
+    await ensureConfig();
+    await db
+      .update(siteConfig)
+      .set({ ...DEFAULT_CONFIG, updatedAt: new Date() })
+      .where(eq(siteConfig.id, "global"));
+    await db.delete(blocks);
+  } catch {
+    // Continua com memoryStore
+  }
+}
+
+export async function getBlock(id: number): Promise<BlockRow | null> {
+  try {
+    const [row] = await db
+      .select()
+      .from(blocks)
+      .where(eq(blocks.id, id))
+      .limit(1);
+    if (row) return row;
+  } catch {
+    // fallback memória
+  }
+  return memoryStore.blocks.find((b) => b.id === id) ?? null;
 }
 
 export async function createBlock(values: {
@@ -127,20 +196,44 @@ export async function createBlock(values: {
   width?: number;
   fontSize?: number;
   color?: string;
-}) {
-  const [row] = await db
-    .insert(blocks)
-    .values({
-      type: values.type,
-      content: values.content,
-      x: values.x ?? 50,
-      y: values.y ?? 60,
-      width: values.width ?? 220,
-      fontSize: values.fontSize ?? 22,
-      color: values.color ?? "#222222",
-    })
-    .returning();
-  return row;
+}): Promise<BlockRow> {
+  const newMemoryBlock: BlockRow = {
+    id: memoryStore.nextBlockId++,
+    type: values.type,
+    content: values.content,
+    x: values.x ?? 50,
+    y: values.y ?? 60,
+    width: values.width ?? 220,
+    fontSize: values.fontSize ?? 22,
+    color: values.color ?? "#222222",
+    active: true,
+    createdAt: new Date(),
+  };
+
+  try {
+    const [row] = await db
+      .insert(blocks)
+      .values({
+        type: values.type,
+        content: values.content,
+        x: values.x ?? 50,
+        y: values.y ?? 60,
+        width: values.width ?? 220,
+        fontSize: values.fontSize ?? 22,
+        color: values.color ?? "#222222",
+      })
+      .returning();
+
+    if (row) {
+      memoryStore.blocks.push(row);
+      return row;
+    }
+  } catch {
+    // fallback para memória
+  }
+
+  memoryStore.blocks.push(newMemoryBlock);
+  return newMemoryBlock;
 }
 
 export async function updateBlock(
@@ -155,21 +248,50 @@ export async function updateBlock(
     color: string;
   }>,
 ): Promise<BlockRow | null> {
-  const [row] = await db
-    .update(blocks)
-    .set(values)
-    .where(eq(blocks.id, id))
-    .returning();
-  return row ?? null;
+  const idx = memoryStore.blocks.findIndex((b) => b.id === id);
+  if (idx !== -1) {
+    memoryStore.blocks[idx] = {
+      ...memoryStore.blocks[idx],
+      ...values,
+    };
+  }
+
+  try {
+    const [row] = await db
+      .update(blocks)
+      .set(values)
+      .where(eq(blocks.id, id))
+      .returning();
+
+    if (row) {
+      if (idx !== -1) memoryStore.blocks[idx] = row;
+      return row;
+    }
+  } catch {
+    // fallback memória
+  }
+
+  return idx !== -1 ? memoryStore.blocks[idx] : null;
 }
 
 export async function deleteBlock(id: number): Promise<boolean> {
-  const [existing] = await db
-    .select({ id: blocks.id })
-    .from(blocks)
-    .where(eq(blocks.id, id))
-    .limit(1);
-  if (!existing) return false;
-  await db.delete(blocks).where(eq(blocks.id, id));
-  return true;
+  const prevLen = memoryStore.blocks.length;
+  memoryStore.blocks = memoryStore.blocks.filter((b) => b.id !== id);
+
+  try {
+    const [existing] = await db
+      .select({ id: blocks.id })
+      .from(blocks)
+      .where(eq(blocks.id, id))
+      .limit(1);
+
+    if (existing) {
+      await db.delete(blocks).where(eq(blocks.id, id));
+      return true;
+    }
+  } catch {
+    // fallback memória
+  }
+
+  return memoryStore.blocks.length < prevLen;
 }

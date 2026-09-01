@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { blocks } from "@/db/schema";
-import { createBlock, deleteBlock, updateBlock } from "@/lib/state";
+import { createBlock, deleteBlock, getBlock, updateBlock } from "@/lib/state";
 import { isSafeMediaUrl } from "@/lib/media";
 
 export const dynamic = "force-dynamic";
@@ -65,12 +62,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "missing id" }, { status: 400 });
     }
 
-    const [existing] = await db
-      .select({ type: blocks.type })
-      .from(blocks)
-      .where(eq(blocks.id, body.id))
-      .limit(1);
-
+    const existing = await getBlock(body.id);
     if (!existing) {
       return NextResponse.json({ error: "block not found" }, { status: 404 });
     }

@@ -274,12 +274,16 @@ export default function ClockApp({ initial }: { initial: SiteState }) {
       if (!response.ok) {
         let message = "Erro ao criar elemento.";
         try {
-          const data = await response.json();
-          if (typeof data.error === "string") message = data.error;
+          const errData = (await response.json()) as { error?: string };
+          if (typeof errData.error === "string") message = errData.error;
         } catch {
           /* ignora */
         }
         throw new Error(message);
+      }
+      const data = (await response.json()) as { ok?: boolean; block?: Block };
+      if (data.block) {
+        setBlocks((previous) => [...previous.filter((b) => b.id !== data.block!.id), data.block!]);
       }
       await sync();
       setEditMode(true);

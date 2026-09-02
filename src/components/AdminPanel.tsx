@@ -59,6 +59,7 @@ export default function AdminPanel({
 }) {
   const [tab, setTab] = useState<Tab>("textos");
   const [draft, setDraft] = useState<SiteConfig>(config);
+  const [isDraftDirty, setIsDraftDirty] = useState(false);
   const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [composer, setComposer] = useState<BlockType | null>(null);
@@ -74,10 +75,18 @@ export default function AdminPanel({
     return () => window.clearTimeout(timer);
   }, [status]);
 
-  // Sincroniza o draft com o config quando ele muda externamente (via sync)
+  // Sincroniza o draft com o config quando ele muda externamente (via sync),
+  // mas nunca sobrescreve alterações locais ainda não salvas.
   useEffect(() => {
-    setDraft(config);
-  }, [config]);
+    if (!isDraftDirty) {
+      setDraft(config);
+    }
+  }, [config, isDraftDirty]);
+
+  function updateDraft(patch: Partial<SiteConfig>) {
+    setDraft((current) => ({ ...current, ...patch }));
+    setIsDraftDirty(true);
+  }
 
   function flash(type: "ok" | "err", msg: string) {
     setStatus({ type, msg });
@@ -93,8 +102,10 @@ export default function AdminPanel({
         footerLeft: draft.footerLeft,
         footerRight: draft.footerRight,
       });
+      setIsDraftDirty(false);
       flash("ok", "Textos salvos em todos os dispositivos!");
     } catch {
+      // Mantém o draft intacto para permitir nova tentativa.
       flash("err", "Erro ao salvar os textos.");
     }
     setBusy(false);
@@ -104,6 +115,7 @@ export default function AdminPanel({
     setBusy(true);
     try {
       await onSaveConfig({ backgroundUrl: url });
+      setIsDraftDirty(false);
       flash("ok", url ? "Imagem global aplicada!" : "Imagem global removida.");
     } catch {
       flash("err", "Erro ao salvar a imagem.");
@@ -115,6 +127,7 @@ export default function AdminPanel({
     setBusy(true);
     try {
       await onSaveConfig({ backgroundVideoUrl: url });
+      setIsDraftDirty(false);
       flash("ok", url ? "Vídeo global aplicado!" : "Vídeo global removido.");
     } catch {
       flash("err", "Erro ao salvar o vídeo.");
@@ -126,6 +139,7 @@ export default function AdminPanel({
     setBusy(true);
     try {
       await onSaveConfig({ backgroundAudioUrl: url });
+      setIsDraftDirty(false);
       flash("ok", url ? "Áudio global aplicado!" : "Áudio global removido.");
     } catch (error) {
       flash("err", (error as Error).message);
@@ -214,6 +228,7 @@ export default function AdminPanel({
 
   /* ===== Relógio customizado ===== */
   const [customDateTime, setCustomDateTime] = useState<string>("");
+  const [isCustomTimeDirty, setIsCustomTimeDirty] = useState(false);
 
   function toLocalInput(iso: string | null | undefined): string {
     if (!iso) return "";
@@ -224,12 +239,13 @@ export default function AdminPanel({
   }
 
   useEffect(() => {
+    if (isCustomTimeDirty) return;
     if (config.timeMode === "custom" && config.customTime) {
       setCustomDateTime(toLocalInput(config.customTime));
     } else {
       setCustomDateTime("");
     }
-  }, [config.timeMode, config.customTime]);
+  }, [config.timeMode, config.customTime, isCustomTimeDirty]);
 
   async function applyCustomTime() {
     if (!customDateTime) {
@@ -245,6 +261,7 @@ export default function AdminPanel({
         customTime: iso,
         clockFrozen: false,
       });
+      setIsCustomTimeDirty(false);
       flash("ok", "Relógio personalizado aplicado em todos os dispositivos!");
     } catch (error) {
       flash("err", (error as Error).message);
@@ -273,6 +290,7 @@ export default function AdminPanel({
         clockFrozen: false,
       });
       setCustomDateTime("");
+      setIsCustomTimeDirty(false);
       flash("ok", "Relógio voltou ao horário real de Brasília.");
     } catch {
       flash("err", "Erro ao salvar.");
@@ -335,7 +353,7 @@ export default function AdminPanel({
               <input
                 className={input}
                 value={draft.title}
-                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                onChange={(event) => updateDraft({ title: event.target.value })}
               />
             </div>
 
@@ -344,7 +362,7 @@ export default function AdminPanel({
               <textarea
                 className={`${input} min-h-[58px] resize-y`}
                 value={draft.subtitle}
-                onChange={(event) => setDraft({ ...draft, subtitle: event.target.value })}
+                onChange={(event) => updateDraft({ subtitle: event.target.value })}
               />
             </div>
 
@@ -353,7 +371,7 @@ export default function AdminPanel({
               <textarea
                 className={`${input} min-h-[58px] resize-y`}
                 value={draft.note}
-                onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+                onChange={(event) => updateDraft({ note: event.target.value })}
               />
             </div>
 
@@ -362,7 +380,7 @@ export default function AdminPanel({
               <input
                 className={input}
                 value={draft.footerLeft}
-                onChange={(event) => setDraft({ ...draft, footerLeft: event.target.value })}
+                onChange={(event) => updateDraft({ footerLeft: event.target.value })}
               />
             </div>
 
@@ -371,7 +389,7 @@ export default function AdminPanel({
               <textarea
                 className={`${input} min-h-[58px] resize-y`}
                 value={draft.footerRight}
-                onChange={(event) => setDraft({ ...draft, footerRight: event.target.value })}
+                onChange={(event) => updateDraft({ footerRight: event.target.value })}
               />
             </div>
 
@@ -404,7 +422,7 @@ export default function AdminPanel({
                       ? ""
                       : draft.backgroundUrl ?? ""
                   }
-                  onChange={(event) => setDraft({ ...draft, backgroundUrl: event.target.value })}
+                  onChange={(event) => updateDraft({ backgroundUrl: event.target.value })}
                 />
                 <button
                   onClick={() => void setBackground(draft.backgroundUrl || null)}
@@ -467,7 +485,7 @@ export default function AdminPanel({
                       : draft.backgroundVideoUrl ?? ""
                   }
                   onChange={(event) =>
-                    setDraft({ ...draft, backgroundVideoUrl: event.target.value })
+                    updateDraft({ backgroundVideoUrl: event.target.value })
                   }
                 />
                 <button
@@ -534,7 +552,7 @@ export default function AdminPanel({
                       : draft.backgroundAudioUrl ?? ""
                   }
                   onChange={(event) =>
-                    setDraft({ ...draft, backgroundAudioUrl: event.target.value })
+                    updateDraft({ backgroundAudioUrl: event.target.value })
                   }
                 />
                 <button
@@ -617,7 +635,10 @@ export default function AdminPanel({
                 step="1"
                 className={input}
                 value={customDateTime}
-                onChange={(event) => setCustomDateTime(event.target.value)}
+                onChange={(event) => {
+                  setCustomDateTime(event.target.value);
+                  setIsCustomTimeDirty(true);
+                }}
               />
               <p className="mt-1 text-[11px] leading-[15px] text-[#888]">
                 O relógio vai mostrar essa data/hora e continuar avançando em tempo real.
